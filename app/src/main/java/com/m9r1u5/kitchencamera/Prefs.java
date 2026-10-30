@@ -37,8 +37,8 @@ public class Prefs {
         return !ip().isEmpty() && !user().isEmpty() && !pass().isEmpty();
     }
 
+    /** Stream address without the login (login is sent separately to the player). */
     public String rtspUrl() {
-        return "rtsp://" + Uri.encode(user()) + ":" + Uri.encode(pass()) + "@"
-                + ip() + ":" + rtspPort() + "/" + (hd() ? "stream1" : "stream2");
+        return "rtsp://" + ip() + ":" + rtspPort() + "/" + (hd() ? "stream1" : "stream2");
     }
 }

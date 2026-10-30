@@ -13,45 +13,55 @@ import android.provider.MediaStore;
 import android.view.MotionEvent;
 import android.view.TextureView;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
-import androidx.annotation.NonNull;
-import androidx.annotation.OptIn;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
-import androidx.media3.common.MediaItem;
-import androidx.media3.common.PlaybackException;
-import androidx.media3.common.Player;
-import androidx.media3.common.util.UnstableApi;
-import androidx.media3.exoplayer.DefaultLoadControl;
-import androidx.media3.exoplayer.ExoPlayer;
-import androidx.media3.exoplayer.rtsp.RtspMediaSource;
-import androidx.media3.ui.PlayerView;
+
+import org.videolan.libvlc.LibVLC;
+import org.videolan.libvlc.Media;
+import org.videolan.libvlc.MediaPlayer;
+import org.videolan.libvlc.util.VLCVideoLayout;
 
 import java.io.OutputStream;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.Locale;
 
-@OptIn(markerClass = UnstableApi.class)
 public class MainActivity extends AppCompatActivity {
+
+    private static final long CONNECT_TIMEOUT_MS = 15000;
+    private static final long RETRY_DELAY_MS = 4000;
 
     private Prefs prefs;
     private Onvif onvif;
-    private ExoPlayer player;
-    private PlayerView playerView;
+    private LibVLC libVlc;
+    private MediaPlayer player;
+    private VLCVideoLayout videoLayout;
     private TextView status;
     private View topBar, controls;
     private Button btnQuality, btnSound;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean running = false;
+    private boolean playing = false;
+    private boolean viewsAttached = false;
     private boolean fullscreen = false;
+
+    private final Runnable retry = this::startStream;
+    private final Runnable connectTimeout = () -> {
+        if (running && !playing) {
+            showStatus("Can't reach the camera.\nMake sure you're on your home Wi-Fi\nand the login details are right.\nRetrying…");
+            handler.postDelayed(retry, RETRY_DELAY_MS);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,7 +72,15 @@ public class MainActivity extends AppCompatActivity {
         prefs = new Prefs(this);
         onvif = new Onvif(msg -> Toast.makeText(this, msg, Toast.LENGTH_SHORT).show());
 
-        playerView = findViewById(R.id.player);
+        ArrayList<String> args = new ArrayList<>();
+        args.add("--network-caching=400");
+        args.add("--no-drop-late-frames");
+        args.add("--no-skip-frames");
+        libVlc = new LibVLC(this, args);
+        player = new MediaPlayer(libVlc);
+        player.setEventListener(this::onPlayerEvent);
+
+        videoLayout = findViewById(R.id.player);
         status = findViewById(R.id.status);
         topBar = findViewById(R.id.topBar);
         controls = findViewById(R.id.controls);
@@ -80,13 +98,13 @@ public class MainActivity extends AppCompatActivity {
 
         btnSound.setOnClickListener(v -> {
             prefs.setMuted(!prefs.muted());
-            if (player != null) player.setVolume(prefs.muted() ? 0f : 1f);
+            applyVolume();
             updateButtons();
         });
 
         findViewById(R.id.btnSnapshot).setOnClickListener(v -> takeSnapshot());
         findViewById(R.id.btnFullscreen).setOnClickListener(v -> setFullscreen(true));
-        playerView.setOnClickListener(v -> { if (fullscreen) setFullscreen(false); });
+        videoLayout.setOnClickListener(v -> { if (fullscreen) setFullscreen(false); });
 
         bindMove(findViewById(R.id.btnUp), 0f, 1f);
         bindMove(findViewById(R.id.btnDown), 0f, -1f);
@@ -114,6 +132,11 @@ public class MainActivity extends AppCompatActivity {
     protected void onStart() {
         super.onStart();
         running = true;
+        if (!viewsAttached) {
+            // Texture view so snapshots can read the picture.
+            player.attachViews(videoLayout, null, false, true);
+            viewsAttached = true;
+        }
         onvif.configure(prefs.ip(), prefs.onvifPort(), prefs.user(), prefs.pass());
         updateButtons();
         startStream();
@@ -125,64 +148,76 @@ public class MainActivity extends AppCompatActivity {
         running = false;
         handler.removeCallbacksAndMessages(null);
         onvif.stop();
-        releasePlayer();
+        player.stop();
+        if (viewsAttached) {
+            player.detachViews();
+            viewsAttached = false;
+        }
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         onvif.shutdown();
+        player.release();
+        libVlc.release();
     }
 
     // ---------- live video ----------
 
     private void startStream() {
         handler.removeCallbacksAndMessages(null);
-        releasePlayer();
+        playing = false;
+        player.stop();
         if (!running) return;
         if (!prefs.isConfigured()) {
             showStatus("Tap ⚙ to enter your camera details");
             return;
         }
 
-        DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
-                .setBufferDurationsMs(500, 2000, 250, 250)
-                .build();
-        player = new ExoPlayer.Builder(this).setLoadControl(loadControl).build();
-        player.setVolume(prefs.muted() ? 0f : 1f);
-        playerView.setPlayer(player);
+        Media media = new Media(libVlc, Uri.parse(prefs.rtspUrl()));
+        media.addOption(":rtsp-user=" + prefs.user());
+        media.addOption(":rtsp-pwd=" + prefs.pass());
+        media.addOption(":network-caching=400");
+        media.setHWDecoderEnabled(true, false);
+        player.setMedia(media);
+        media.release();
+        player.play();
+        applyVolume();
 
-        RtspMediaSource source = new RtspMediaSource.Factory()
-                .setForceUseRtpTcp(true)
-                .setTimeoutMs(8000)
-                .createMediaSource(MediaItem.fromUri(prefs.rtspUrl()));
-
-        player.addListener(new Player.Listener() {
-            @Override
-            public void onPlaybackStateChanged(int state) {
-                if (state == Player.STATE_READY) hideStatus();
-                else if (state == Player.STATE_BUFFERING) showStatus("Connecting…");
-            }
-
-            @Override
-            public void onPlayerError(@NonNull PlaybackException error) {
-                showStatus("Can't reach the camera.\nMake sure you're on your home Wi-Fi.\nRetrying…");
-                handler.postDelayed(MainActivity.this::startStream, 4000);
-            }
-        });
-
-        player.setMediaSource(source);
-        player.prepare();
-        player.setPlayWhenReady(true);
         showStatus("Connecting…");
+        handler.postDelayed(connectTimeout, CONNECT_TIMEOUT_MS);
     }
 
-    private void releasePlayer() {
-        if (player != null) {
-            playerView.setPlayer(null);
-            player.release();
-            player = null;
+    private void onPlayerEvent(MediaPlayer.Event event) {
+        switch (event.type) {
+            case MediaPlayer.Event.Playing:
+                applyVolume();
+                break;
+            case MediaPlayer.Event.Vout:
+                if (event.getVoutCount() > 0) {
+                    playing = true;
+                    handler.removeCallbacks(connectTimeout);
+                    hideStatus();
+                }
+                break;
+            case MediaPlayer.Event.EncounteredError:
+            case MediaPlayer.Event.EndReached:
+                if (running) {
+                    playing = false;
+                    handler.removeCallbacks(connectTimeout);
+                    showStatus("Lost the camera.\nMake sure you're on your home Wi-Fi.\nRetrying…");
+                    handler.removeCallbacks(retry);
+                    handler.postDelayed(retry, RETRY_DELAY_MS);
+                }
+                break;
+            default:
+                break;
         }
+    }
+
+    private void applyVolume() {
+        player.setVolume(prefs.muted() ? 0 : 100);
     }
 
     private void showStatus(String text) {
@@ -222,16 +257,23 @@ public class MainActivity extends AppCompatActivity {
 
     // ---------- snapshot ----------
 
-    private void takeSnapshot() {
-        View surface = playerView.getVideoSurfaceView();
-        if (!(surface instanceof TextureView) || player == null
-                || player.getPlaybackState() != Player.STATE_READY) {
-            Toast.makeText(this, "No live picture yet", Toast.LENGTH_SHORT).show();
-            return;
+    private static TextureView findTexture(View v) {
+        if (v instanceof TextureView) return (TextureView) v;
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                TextureView t = findTexture(g.getChildAt(i));
+                if (t != null) return t;
+            }
         }
-        Bitmap bmp = ((TextureView) surface).getBitmap();
+        return null;
+    }
+
+    private void takeSnapshot() {
+        TextureView tv = findTexture(videoLayout);
+        Bitmap bmp = (playing && tv != null && tv.isAvailable()) ? tv.getBitmap() : null;
         if (bmp == null) {
-            Toast.makeText(this, "Couldn't grab the picture", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "No live picture yet", Toast.LENGTH_SHORT).show();
             return;
         }
         String name = "Kitchen_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".jpg";
