@@ -1,0 +1,52 @@
+plugins {
+    id 'com.android.application'
+}
+
+def buildNumber = (project.findProperty('versionCode') ?: '1').toString().toInteger()
+
+android {
+    namespace 'com.m9r1u5.kitchencamera'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.m9r1u5.kitchencamera'
+        minSdk 29
+        targetSdk 34
+        versionCode buildNumber
+        versionName "1.0.${buildNumber}"
+    }
+
+    signingConfigs {
+        release {
+            storeFile file('kitchen-camera.keystore')
+            storePassword 'kitchencam123'
+            keyAlias 'kitchencamera'
+            keyPassword 'kitchencam123'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    def media3 = '1.4.1'
+    implementation "androidx.media3:media3-exoplayer:$media3"
+    implementation "androidx.media3:media3-exoplayer-rtsp:$media3"
+    implementation "androidx.media3:media3-ui:$media3"
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+}

@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:id="@+id/topBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="12dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/app_name"
+            android:textColor="@color/text"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnQuality"
+            style="@style/SmallButton"
+            android:text="HD" />
+
+        <Button
+            android:id="@+id/btnSound"
+            style="@style/SmallButton"
+            android:text="🔇" />
+
+        <Button
+            android:id="@+id/btnSettings"
+            style="@style/SmallButton"
+            android:text="⚙" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#000000">
+
+        <androidx.media3.ui.PlayerView
+            android:id="@+id/player"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            app:resize_mode="fit"
+            app:shutter_background_color="#000000"
+            app:surface_type="texture_view"
+            app:use_controller="false" />
+
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:padding="16dp"
+            android:text="Connecting…"
+            android:textColor="@color/text"
+            android:textSize="16sp" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/controls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <Button
+            android:id="@+id/btnUp"
+            style="@style/PadButton"
+            android:text="▲" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnLeft"
+                style="@style/PadButton"
+                android:text="◀" />
+
+            <View
+                android:layout_width="72dp"
+                android:layout_height="72dp" />
+
+            <Button
+                android:id="@+id/btnRight"
+                style="@style/PadButton"
+                android:text="▶" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnDown"
+            style="@style/PadButton"
+            android:text="▼" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnSnapshot"
+                style="@style/WideButton"
+                android:layout_marginEnd="8dp"
+                android:text="📷  Snapshot" />
+
+            <Button
+                android:id="@+id/btnFullscreen"
+                style="@style/WideButton"
+                android:layout_marginStart="8dp"
+                android:text="⛶  Full screen" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Hold an arrow to move the camera"
+            android:textColor="@color/muted"
+            android:textSize="12sp" />
+    </LinearLayout>
+</LinearLayout>
