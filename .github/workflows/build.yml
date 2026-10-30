@@ -27,7 +27,7 @@ jobs:
         run: |
           set -o pipefail
           gradle assembleRelease -PversionCode=${{ github.run_number }} --no-daemon --console=plain 2>&1 | tee build.log || {
-            grep -E "error:|e: |ERROR|What went wrong|Could not|Caused by|\.java:[0-9]+|\.xml" build.log | head -40 | while IFS= read -r line; do echo "::error::$line"; done
+            grep -A5 -E "error:|What went wrong|Caused by" build.log | head -60 | while IFS= read -r line; do [ -n "$line" ] && echo "::error::$line"; done
             exit 1
           }
 
