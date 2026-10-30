@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -24,7 +24,12 @@ jobs:
           gradle-version: '8.9'
 
       - name: Build signed APK
-        run: gradle assembleRelease -PversionCode=${{ github.run_number }} --no-daemon
+        run: |
+          set -o pipefail
+          gradle assembleRelease -PversionCode=${{ github.run_number }} --no-daemon --console=plain 2>&1 | tee build.log || {
+            grep -E "error:|e: |ERROR|What went wrong|Could not|Caused by|\.java:[0-9]+|\.xml" build.log | head -40 | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          }
 
       - name: Rename APK
         run: cp app/build/outputs/apk/release/app-release.apk KitchenCamera.apk
